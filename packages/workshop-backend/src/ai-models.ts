@@ -9,7 +9,6 @@ import { stream as googleGenerativeAiStream } from "@earendil-works/pi-ai/api/go
 import { stream as openaiCompletionsStream } from "@earendil-works/pi-ai/api/openai-completions";
 import { stream as openaiResponsesStream } from "@earendil-works/pi-ai/api/openai-responses";
 import { ANTHROPIC_MODELS } from "@earendil-works/pi-ai/providers/anthropic.models";
-import { CLOUDFLARE_WORKERS_AI_MODELS } from "@earendil-works/pi-ai/providers/cloudflare-workers-ai.models";
 import { GOOGLE_MODELS } from "@earendil-works/pi-ai/providers/google.models";
 import { OPENAI_MODELS } from "@earendil-works/pi-ai/providers/openai.models";
 import { ApprovalQueue, Gatekeeper, ResourceDescription, stripTrailingSlashes } from '@gadgets/workshop-shared/gatekeeper';
@@ -20,6 +19,7 @@ import { AiChatAuthorInfo, AiModelConfig, SUGGESTED_MODELS, WORKERS_AI_OUTPUT_LI
 import { AiGatewayConfig, getAiGatewayConfig, type AiGatewayLogRoute } from "./ai-gateway.js";
 import { completeText } from "./ai-invoke.js";
 import { bridgePdfAttachments } from "./chat-attachment-pdf.js";
+import { lookupWorkersAiCatalogModel, workersAiOutputTokenCap } from "./workers-ai-catalog.js";
 import { wrapFetchForWorkersAi } from "./workers-ai-transport.js";
 
  /**
@@ -133,7 +133,7 @@ function catalogModel(provider: AiModelConfig["provider"], modelId: string): Mod
     case "anthropic": return (ANTHROPIC_MODELS as Record<string, Model<Api>>)[modelId];
     case "openai": return (OPENAI_MODELS as Record<string, Model<Api>>)[modelId];
     case "google": return (GOOGLE_MODELS as Record<string, Model<Api>>)[modelId];
-    case "cloudflare": return (CLOUDFLARE_WORKERS_AI_MODELS as Record<string, Model<Api>>)[modelId];
+    case "cloudflare": return lookupWorkersAiCatalogModel(modelId);
     case "ollama": return undefined;
     default: return undefined;
   }
@@ -147,7 +147,7 @@ function modelTokenWindow(config: AiModelConfig, catalog: Model<Api> | undefined
   const suggested = SUGGESTED_MODELS[config.provider]?.[config.model];
   return {
     contextWindow: suggested?.contextWindow ?? catalog?.contextWindow ?? 128_000,
-    maxTokens: suggested?.outputLimit ?? catalog?.maxTokens ??
+    maxTokens: suggested?.outputLimit ?? workersAiOutputTokenCap(catalog) ??
         (config.provider === "cloudflare" ? WORKERS_AI_OUTPUT_LIMIT : undefined) ??
         4096,
   };
@@ -235,7 +235,7 @@ function gatewayNativeModel(config: AiModelConfig, gatewayUrl: string): Model<Ap
       // route. This is Workers AI's native chat API (the same surface as its direct
       // /accounts/{id}/ai/v1 REST endpoint), not the gateway's cross-provider /compat layer.
       return {
-        id: config.model,
+        id: catalog?.id ?? config.model,
         name: catalog?.name ?? config.model,
         api: "openai-completions",
         provider: "cloudflare-workers-ai",
@@ -546,7 +546,7 @@ function getModelDirect(config: AiModelConfig, sessionAffinity?: string): ModelH
       }
       return makeHandle({
         model: {
-          id: config.model,
+          id: catalog?.id ?? config.model,
           name: catalog?.name ?? config.model,
           api: "openai-completions",
           provider: "cloudflare-workers-ai",

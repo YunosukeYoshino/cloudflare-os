@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   normalizeWorkersAiChatCompletionsBody,
+  prepareWorkersAiChatCompletionsBody,
   wrapFetchForWorkersAi,
 } from "../src/workers-ai-transport.js";
 
@@ -36,6 +37,18 @@ describe("normalizeWorkersAiChatCompletionsBody", () => {
   });
 });
 
+describe("prepareWorkersAiChatCompletionsBody", () => {
+  it("rewrites model aliases and clamps completion tokens", () => {
+    const body = prepareWorkersAiChatCompletionsBody({
+      model: "llama-3.3",
+      max_completion_tokens: 32_768,
+      messages: [{role: "user", content: "ping"}],
+    });
+    expect(body.model).toBe("@cf/meta/llama-3.3-70b-instruct-fp8-fast");
+    expect(body.max_completion_tokens).toBe(19_904);
+  });
+});
+
 describe("wrapFetchForWorkersAi", () => {
   it("normalizes direct REST chat/completions requests", async () => {
     let capturedBody = "";
@@ -49,30 +62,42 @@ describe("wrapFetchForWorkersAi", () => {
         {
           method: "POST",
           body: JSON.stringify({
+            model: "llama-3.3",
+            max_completion_tokens: 32_768,
             messages: [{role: "assistant", content: null, tool_calls: []}],
           }),
         });
 
-    expect(JSON.parse(capturedBody).messages[0].content).toBe("");
+    const body = JSON.parse(capturedBody);
+    expect(body.model).toBe("@cf/meta/llama-3.3-70b-instruct-fp8-fast");
+    expect(body.max_completion_tokens).toBe(19_904);
+    expect(body.messages[0].content).toBe("");
   });
 
-  it("normalizes AI Gateway workers-ai chat/completions requests", async () => {
+  it("normalizes Request-object bodies from binding fetch", async () => {
     let capturedBody = "";
     const fetchImpl = async (_input: RequestInfo | URL, init?: RequestInit) => {
       capturedBody = init?.body as string;
       return new Response("{}", {status: 200});
     };
 
-    await wrapFetchForWorkersAi(fetchImpl)(
-        "https://gateway.ai.cloudflare.com/v1/acct/gw/workers-ai/v1/chat/completions",
+    const request = new Request(
+        "https://workers-binding.ai/ai-gateway/gateways/default/workers-ai/v1/chat/completions",
         {
           method: "POST",
+          headers: {"content-type": "application/json"},
           body: JSON.stringify({
-            messages: [{role: "user", content: [{type: "text", text: "hi"}]}],
+            model: "llama-3.3",
+            max_completion_tokens: 32_768,
+            messages: [{role: "user", content: "ping"}],
           }),
         });
 
-    expect(JSON.parse(capturedBody).messages[0].content).toBe("hi");
+    await wrapFetchForWorkersAi(fetchImpl)(request);
+
+    const body = JSON.parse(capturedBody);
+    expect(body.model).toBe("@cf/meta/llama-3.3-70b-instruct-fp8-fast");
+    expect(body.max_completion_tokens).toBe(19_904);
   });
 
   it("passes through non-Workers-AI URLs unchanged", async () => {

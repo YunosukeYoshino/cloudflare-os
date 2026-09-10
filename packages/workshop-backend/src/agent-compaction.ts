@@ -2,7 +2,7 @@ import {SUGGESTED_MODELS, WORKERS_AI_OUTPUT_LIMIT, type AiChatMessage, type AiMo
   from "@gadgets/workshop-shared/api";
 import {composeCodeChange, type CodeChange} from "@gadgets/workshop-shared/code-change";
 import type {Api, Message, Model} from "@earendil-works/pi-ai";
-import {CLOUDFLARE_WORKERS_AI_MODELS} from "@earendil-works/pi-ai/providers/cloudflare-workers-ai.models";
+import {lookupWorkersAiCatalogModel, workersAiOutputTokenCap} from "./workers-ai-catalog.js";
 import type {ChatBindingEntry, CompactionCheckpoint} from "./agent";
 import {zeroUsage} from "./ai-invoke";
 
@@ -30,9 +30,8 @@ export function getModelTokenLimits(config: AiModelConfig):
     {inputBudget: number, maxOutputTokens?: number} {
   let suggested = SUGGESTED_MODELS[config.provider][config.model];
   let catalog = config.provider === "cloudflare"
-      ? CLOUDFLARE_WORKERS_AI_MODELS[config.model as keyof typeof CLOUDFLARE_WORKERS_AI_MODELS]
-      : undefined;
-  let maxOutputTokens = suggested?.outputLimit ?? catalog?.maxTokens ??
+      ? lookupWorkersAiCatalogModel(config.model) : undefined;
+  let maxOutputTokens = suggested?.outputLimit ?? workersAiOutputTokenCap(catalog) ??
       (config.provider === "cloudflare" ? WORKERS_AI_OUTPUT_LIMIT : undefined);
   let contextWindow = suggested?.contextWindow ?? catalog?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
   return {

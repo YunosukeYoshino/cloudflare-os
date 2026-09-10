@@ -451,8 +451,20 @@ describe("getModel direct routing (no gateway)", () => {
       apiToken: "user-token",
     }, INITIATOR);
 
-    // Llama 3.3's window is 24k; the generic Workers AI default (32768) must not win.
-    expect(handle.model.maxTokens).toBe(24000);
+    // Llama 3.3's window is 24k; leave prompt headroom instead of the generic 32768 default.
+    expect(handle.model.maxTokens).toBe(19_904);
+  });
+
+  it("resolves Workers AI aliases to canonical catalog ids", () => {
+    const handle = getModel(env({ CF_AI_GATEWAY: undefined }), {
+      provider: "cloudflare",
+      model: "llama-3.3",
+      accountId: "user-account-id",
+      apiToken: "user-token",
+    }, INITIATOR);
+
+    expect(handle.model.id).toBe("@cf/meta/llama-3.3-70b-instruct-fp8-fast");
+    expect(handle.model.maxTokens).toBe(19_904);
   });
 
   it("uses the config's own account and token for direct Workers AI", async () => {

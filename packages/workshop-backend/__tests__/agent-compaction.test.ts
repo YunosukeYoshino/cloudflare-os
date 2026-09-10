@@ -108,7 +108,15 @@ describe("compaction trigger", () => {
       provider: "cloudflare",
       model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
       apiToken: "",
-    })).toEqual({inputBudget: 0, maxOutputTokens: 24_000});
+    })).toEqual({inputBudget: 4096, maxOutputTokens: 19_904});
+  });
+
+  it("resolves Workers AI model aliases when computing token limits", () => {
+    expect(getModelTokenLimits({
+      provider: "cloudflare",
+      model: "llama-3.3",
+      apiToken: "",
+    })).toEqual({inputBudget: 4096, maxOutputTokens: 19_904});
   });
 
   // Workers AI rejects a request whose prompt and response cap together exceed the window, so a
