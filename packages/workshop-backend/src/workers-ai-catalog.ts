@@ -3,8 +3,11 @@ import {CLOUDFLARE_WORKERS_AI_MODELS} from "@earendil-works/pi-ai/providers/clou
 import {WORKERS_AI_OUTPUT_LIMIT} from "@gadgets/workshop-shared/api";
 
 // Workers AI counts the requested response cap against the model window together with the
-// prompt, so leave headroom for at least a minimal agent system prompt + user turn.
-const MIN_PROMPT_RESERVE = 4096;
+// prompt. CF-OS agent turns routinely ship a multi-k-token system prompt before the user turn,
+// so reserve enough of the window for prompt + tools and cap completion to a modest fraction.
+const MIN_PROMPT_RESERVE = 12_288;
+/** Never request more than this share of the model window as completion tokens. */
+const MAX_OUTPUT_FRACTION = 0.25;
 
 const catalog = CLOUDFLARE_WORKERS_AI_MODELS as Record<string, Model<Api>>;
 
@@ -37,7 +40,11 @@ export function workersAiOutputTokenCap(
   if (cap === undefined) return undefined;
   const window = catalogEntry?.contextWindow;
   if (window !== undefined) {
-    cap = Math.min(cap, window - MIN_PROMPT_RESERVE);
+    cap = Math.min(
+        cap,
+        window - MIN_PROMPT_RESERVE,
+        Math.floor(window * MAX_OUTPUT_FRACTION),
+    );
     if (catalogEntry?.maxTokens !== undefined) {
       cap = Math.min(cap, catalogEntry.maxTokens);
     }

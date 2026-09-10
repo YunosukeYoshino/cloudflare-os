@@ -45,7 +45,7 @@ describe("prepareWorkersAiChatCompletionsBody", () => {
       messages: [{role: "user", content: "ping"}],
     });
     expect(body.model).toBe("@cf/meta/llama-3.3-70b-instruct-fp8-fast");
-    expect(body.max_completion_tokens).toBe(19_904);
+    expect(body.max_completion_tokens).toBe(6000);
   });
 });
 
@@ -70,7 +70,7 @@ describe("wrapFetchForWorkersAi", () => {
 
     const body = JSON.parse(capturedBody);
     expect(body.model).toBe("@cf/meta/llama-3.3-70b-instruct-fp8-fast");
-    expect(body.max_completion_tokens).toBe(19_904);
+    expect(body.max_completion_tokens).toBe(6000);
     expect(body.messages[0].content).toBe("");
   });
 
@@ -97,7 +97,7 @@ describe("wrapFetchForWorkersAi", () => {
 
     const body = JSON.parse(capturedBody);
     expect(body.model).toBe("@cf/meta/llama-3.3-70b-instruct-fp8-fast");
-    expect(body.max_completion_tokens).toBe(19_904);
+    expect(body.max_completion_tokens).toBe(6000);
   });
 
   it("passes through non-Workers-AI URLs unchanged", async () => {

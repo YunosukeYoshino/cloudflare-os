@@ -451,8 +451,8 @@ describe("getModel direct routing (no gateway)", () => {
       apiToken: "user-token",
     }, INITIATOR);
 
-    // Llama 3.3's window is 24k; leave prompt headroom instead of the generic 32768 default.
-    expect(handle.model.maxTokens).toBe(19_904);
+    // Llama 3.3's window is 24k; reserve most of it for the agent system prompt + history.
+    expect(handle.model.maxTokens).toBe(6000);
   });
 
   it("resolves Workers AI aliases to canonical catalog ids", () => {
@@ -464,7 +464,7 @@ describe("getModel direct routing (no gateway)", () => {
     }, INITIATOR);
 
     expect(handle.model.id).toBe("@cf/meta/llama-3.3-70b-instruct-fp8-fast");
-    expect(handle.model.maxTokens).toBe(19_904);
+    expect(handle.model.maxTokens).toBe(6000);
   });
 
   it("uses the config's own account and token for direct Workers AI", async () => {
