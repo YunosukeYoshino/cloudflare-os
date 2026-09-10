@@ -20,6 +20,7 @@ import { AiChatAuthorInfo, AiModelConfig, SUGGESTED_MODELS, WORKERS_AI_OUTPUT_LI
 import { AiGatewayConfig, getAiGatewayConfig, type AiGatewayLogRoute } from "./ai-gateway.js";
 import { completeText } from "./ai-invoke.js";
 import { bridgePdfAttachments } from "./chat-attachment-pdf.js";
+import { wrapFetchForWorkersAi } from "./workers-ai-transport.js";
 
  /**
   * Routing to bill a user's own Cloudflare account for inference (BYOK path once the free tier is
@@ -146,9 +147,9 @@ function modelTokenWindow(config: AiModelConfig, catalog: Model<Api> | undefined
   const suggested = SUGGESTED_MODELS[config.provider]?.[config.model];
   return {
     contextWindow: suggested?.contextWindow ?? catalog?.contextWindow ?? 128_000,
-    maxTokens: suggested?.outputLimit ??
+    maxTokens: suggested?.outputLimit ?? catalog?.maxTokens ??
         (config.provider === "cloudflare" ? WORKERS_AI_OUTPUT_LIMIT : undefined) ??
-        catalog?.maxTokens ?? 4096,
+        4096,
   };
 }
 
@@ -159,6 +160,8 @@ function workersAiCompat(catalog: Model<Api> | undefined): OpenAICompletionsComp
     supportsStore: false,
     supportsDeveloperRole: false,
     supportsLongCacheRetention: false,
+    // Workers AI rejects OpenAI's streaming usage extension.
+    supportsUsageInStreaming: false,
     ...(catalog?.compat as OpenAICompletionsCompat | undefined),
     sendSessionAffinityHeaders: true,
   };
@@ -340,6 +343,10 @@ function makeHandle(args: HandleArgs): ModelHandle {
           const replaced = await options.onPayload?.(payload, payloadModel);
           return bridgePdfAttachments(args.model.api, replaced ?? payload) ?? replaced;
         },
+        // Workers AI per-model schemas reject pi's content-parts arrays and null assistant
+        // content (cloudflare/cloudflare-os#54); normalize at the transport layer.
+        ...(args.model.provider === "cloudflare-workers-ai"
+            ? {fetch: wrapFetchForWorkersAi(options.fetch ?? args.fetch ?? fetch)} : {}),
       };
       return streamFn(model, context, merged);
     },

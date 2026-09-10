@@ -103,6 +103,14 @@ describe("compaction trigger", () => {
     })).toEqual({inputBudget: 1_000_000, maxOutputTokens: undefined});
   });
 
+  it("uses pi catalog limits for hand-entered Workers AI models in the catalog", () => {
+    expect(getModelTokenLimits({
+      provider: "cloudflare",
+      model: "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+      apiToken: "",
+    })).toEqual({inputBudget: 0, maxOutputTokens: 24_000});
+  });
+
   // Workers AI rejects a request whose prompt and response cap together exceed the window, so a
   // Cloudflare model configured by hand needs the reservation the model table can't declare for it.
   it("reserves Workers AI output capacity for a model the registry doesn't list", () => {

@@ -422,6 +422,39 @@ describe("getModel direct routing (no gateway)", () => {
     expect(request.headers.get("cf-aig-metadata")).toBeNull();
   }, 15000);
 
+  it("normalizes Workers AI chat/completions message content for strict schemas", async () => {
+    const handle = getModel(env({ CF_AI_GATEWAY: undefined }), {
+      ...WORKERS_AI_CONFIG,
+      accountId: "user-account-id",
+      apiToken: "user-token",
+    }, INITIATOR);
+
+    const stream = handle.stream(handle.model, {
+      messages: [{
+        role: "assistant",
+        content: [{type: "toolCall", id: "call_1", name: "testTool", arguments: {}}],
+        timestamp: 0,
+      }],
+      tools: [{name: "testTool", description: "d", parameters: {type: "object", properties: {}}}],
+    }, {fetch: fetchStub, maxRetries: 0});
+    await stream.result();
+
+    const body = JSON.parse(capturedRequests[0].body);
+    expect(body.messages.some((m: {content: unknown}) => m.content === null)).toBe(false);
+    expect(body.stream_options).toBeUndefined();
+  }, 15000);
+
+  it("uses catalog output limits for hand-entered Workers AI models", () => {
+    const handle = getModel(env({ CF_AI_GATEWAY: undefined }), {
+      ...WORKERS_AI_CONFIG,
+      accountId: "user-account-id",
+      apiToken: "user-token",
+    }, INITIATOR);
+
+    // Llama 3.3's window is 24k; the generic Workers AI default (32768) must not win.
+    expect(handle.model.maxTokens).toBe(24000);
+  });
+
   it("uses the config's own account and token for direct Workers AI", async () => {
     // Outside gateway mode, Workers AI is BYOK like any other provider: credentials come from
     // the model config (never from env, which only configures gateway mode).
