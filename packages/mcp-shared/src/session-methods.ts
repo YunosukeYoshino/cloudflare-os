@@ -92,7 +92,7 @@ export function methodsForTool(methodNames: Map<string, string>, wire: string): 
   for (const [method, mapped] of methodNames) {
     if (mapped === wire) methods.push(method);
   }
-  return methods.sort((a, b) => {
+  return methods.toSorted((a, b) => {
     if (a === wire) return -1;
     if (b === wire) return 1;
     return a.localeCompare(b);
