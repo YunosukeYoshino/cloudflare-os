@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  RESERVED_METHOD_NAMES, installToolMethods, toMethodName, toolMethodNames,
+  RESERVED_METHOD_NAMES, installToolMethods, isUsableMethodName, methodsForTool, toMethodName,
+  toolMethodNames,
 } from "../src/session-methods.js";
 import type { ClassifiedTool } from "../src/tools.js";
 
@@ -23,6 +24,21 @@ class Base {
   getActionResult(_id: number) { return "result"; }
   listTools() { return []; }
 }
+
+describe("isUsableMethodName", () => {
+  it("accepts identifiers the RPC stub can deliver", () => {
+    expect(isUsableMethodName("get_test_case")).toBe(true);
+    expect(isUsableMethodName("listIssues")).toBe(true);
+    expect(isUsableMethodName("whoami")).toBe(true);
+  });
+
+  it("rejects names that are not identifiers or that the stub intercepts", () => {
+    expect(isUsableMethodName("get-user-by-id")).toBe(false);
+    expect(isUsableMethodName("2fa")).toBe(false);
+    expect(isUsableMethodName("then")).toBe(false);
+    expect(isUsableMethodName("callTool")).toBe(false);
+  });
+});
 
 describe("toMethodName", () => {
   it("camel-cases the shapes servers actually use", () => {
@@ -61,9 +77,15 @@ describe("toolMethodNames", () => {
     expect([...toolMethodNames([tool("__proto__")])]).toEqual([["proto", "__proto__"]]);
   });
 
-  it("skips the session's own methods", () => {
+  it("skips the session's own methods as camelCase aliases, not as distinct wire names", () => {
+    // `call_tool` camel-cases to `callTool`, which is the session method. The wire name itself is a
+    // usable identifier, so it is still installed -- calling it reaches the MCP tool, not `callTool`.
     for (const name of ["call_tool", "get_action_result", "list_tools"]) {
-      expect(toolMethodNames([tool(name)]).size, name).toBe(0);
+      const names = toolMethodNames([tool(name)]);
+      expect(names.has(name), name).toBe(true);
+      expect(names.has("callTool"), name).toBe(false);
+      expect(names.has("getActionResult"), name).toBe(false);
+      expect(names.has("listTools"), name).toBe(false);
     }
   });
 
@@ -71,15 +93,33 @@ describe("toolMethodNames", () => {
     expect([...toolMethodNames([
       tool("search_tools"), tool("describe_tool"), tool("call_discovered_tool"),
     ])]).toEqual([
+      ["search_tools", "search_tools"],
+      ["describe_tool", "describe_tool"],
+      ["call_discovered_tool", "call_discovered_tool"],
       ["searchTools", "search_tools"],
       ["describeTool", "describe_tool"],
       ["callDiscoveredTool", "call_discovered_tool"],
     ]);
   });
 
-  it("drops both sides of a collision rather than shadowing one", () => {
+  it("installs colliding tools under their own wire names rather than shadowing one", () => {
     const names = toolMethodNames([tool("list_issues"), tool("listIssues"), tool("search")]);
-    expect([...names]).toEqual([["search", "search"]]);
+    expect(names.get("list_issues")).toBe("list_issues");
+    expect(names.get("listIssues")).toBe("listIssues");
+    expect(names.get("search")).toBe("search");
+    // The camelCase alias of `list_issues` would be `listIssues`, which already names the other tool.
+    expect([...names].filter(([, wire]) => wire === "list_issues")).toEqual([
+      ["list_issues", "list_issues"],
+    ]);
+  });
+
+  it("installs the MCP wire name so listTools names are callable as RPC", () => {
+    // Llama 4 Scout (and anything that copies `listTools().name`) calls `binding.get_test_case()`.
+    // Only installing the camelCase alias `getTestCase` made that a hard RPC miss.
+    const names = toolMethodNames([tool("get_test_case")]);
+    expect(names.get("get_test_case")).toBe("get_test_case");
+    expect(names.get("getTestCase")).toBe("get_test_case");
+    expect(methodsForTool(names, "get_test_case")).toEqual(["get_test_case", "getTestCase"]);
   });
 
   it("keeps every reserved name in the exported set, so the two cannot drift", () => {
@@ -99,6 +139,7 @@ describe("installToolMethods", () => {
 
     expect(Object.hasOwn(session, "listIssues")).toBe(false);
     expect(Object.hasOwn(Object.getPrototypeOf(session), "listIssues")).toBe(true);
+    expect(Object.hasOwn(Object.getPrototypeOf(session), "list_issues")).toBe(true);
     expect(Object.keys(Object.getPrototypeOf(session))).toEqual([]);
   });
 
@@ -112,7 +153,22 @@ describe("installToolMethods", () => {
     const B = installToolMethods(Base, [tool("send_message")]);
 
     expect("listIssues" in new A()).toBe(true);
+    expect("list_issues" in new A()).toBe(true);
     expect("listIssues" in new B()).toBe(false);
     expect("sendMessage" in new A()).toBe(false);
+  });
+
+  it("routes the MCP wire name and its camelCase alias to the same tool", () => {
+    const Session = installToolMethods(Base, [tool("get_test_case")]);
+    const session = new Session();
+
+    expect((session as unknown as { get_test_case: () => string }).get_test_case())
+      .toBe("called:get_test_case");
+    expect((session as unknown as { getTestCase: () => string }).getTestCase())
+      .toBe("called:get_test_case");
+    expect(session.calls).toEqual([
+      ["get_test_case", undefined],
+      ["get_test_case", undefined],
+    ]);
   });
 });

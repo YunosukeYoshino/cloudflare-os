@@ -5,6 +5,11 @@
 // own properties on an `RpcTarget`. Each is a one-line delegate to `callTool`, so the scope check,
 // approval queue, and observation record stay in one place and the delegates inherit the
 // `@validateRpc()` checking applied there.
+//
+// Two names are installed when they differ: the MCP wire name (`get_test_case`) when it is a usable
+// identifier, and a camelCase alias (`getTestCase`). `listTools` reports the wire name, and models
+// call that as RPC; advertising only the alias made `binding.get_test_case()` fail even though
+// `binding.getTestCase()` and `binding.callTool("get_test_case")` both worked.
 
 import type { ClassifiedTool } from "./tools.js";
 
@@ -22,6 +27,15 @@ export const RESERVED_METHOD_NAMES: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * True when `name` can be installed as an RPC method: a JavaScript identifier the stub will not
+ * intercept. Wire names that fail this stay reachable through `callTool` and, when camel-casing
+ * produces a different usable identifier, through that alias.
+ */
+export function isUsableMethodName(name: string): boolean {
+  return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(name) && !RESERVED_METHOD_NAMES.has(name);
+}
+
+/**
  * Converts an MCP tool name to a JavaScript method name: `list_issues` -> `listIssues`. Null when
  * the name cannot become a usable identifier; servers are free to name tools anything.
  */
@@ -35,29 +49,54 @@ export function toMethodName(wireName: string): string | null {
 
   // A leading digit cannot start an identifier, and a name the agent cannot type in the generated
   // `.d.ts` is not worth having. Such tools remain reachable through `callTool`.
-  return /^[A-Za-z_$]/.test(name) ? name : null;
+  return isUsableMethodName(name) ? name : null;
 }
 
 /**
- * Maps generated method name to wire tool name, for the tools that can have one. Both sides of a
- * collision are dropped: with `list_issues` and `listIssues` both published, one shadowing the other
- * would send a Gadget to a tool it did not mean, while `callTool` keeps the names distinct.
+ * Maps generated method name to wire tool name, for the tools that can have one.
+ *
+ * Wire names that are usable identifiers are installed first, so `listTools` names and the method
+ * the agent types match. CamelCase aliases are added when they would not shadow a different tool's
+ * wire name. Both sides of a remaining camelCase collision are dropped: with `list_issues` and
+ * `listIssues` both published, one shadowing the other would send a Gadget to a tool it did not
+ * mean, while each tool's own wire name (when usable) and `callTool` keep them distinct.
  */
 export function toolMethodNames(tools: ClassifiedTool[]): Map<string, string> {
+  const names = new Map<string, string>();
+
+  for (const { tool } of tools) {
+    if (isUsableMethodName(tool.name)) names.set(tool.name, tool.name);
+  }
+
   const claims = new Map<string, string[]>();
   for (const { tool } of tools) {
     const method = toMethodName(tool.name);
-    if (method === null || RESERVED_METHOD_NAMES.has(method)) continue;
+    if (method === null || names.has(method)) continue;
     const existing = claims.get(method);
     if (existing) existing.push(tool.name);
     else claims.set(method, [tool.name]);
   }
 
-  const names = new Map<string, string>();
   for (const [method, wireNames] of claims) {
     if (wireNames.length === 1) names.set(method, wireNames[0]);
   }
   return names;
+}
+
+/**
+ * Method names installed for one wire tool, wire name first when it is one of them so describeBinding
+ * lists the name `listTools` reports before the camelCase alias.
+ */
+export function methodsForTool(methodNames: Map<string, string>, wire: string): string[] {
+  const methods: string[] = [];
+  for (const [method, mapped] of methodNames) {
+    if (mapped === wire) methods.push(method);
+  }
+  return methods.toSorted((a, b) => {
+    if (a === wire) return -1;
+    if (b === wire) return 1;
+    return a.localeCompare(b);
+  });
 }
 
 // A class whose instances have a `callTool` method, which is all the generated delegates need.

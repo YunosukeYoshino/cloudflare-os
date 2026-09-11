@@ -57,7 +57,10 @@ export type McpToolMode =
 
 /** Description of one tool exposed by the session. */
 export type McpToolInfo = {
-  /** Tool name, as passed to `callTool`. The generated method name is derived from it. */
+  /**
+   * Tool name, as passed to `callTool`. When this is a valid identifier it is also a session
+   * method; a camelCase alias is generated from it as well.
+   */
   name: string;
   /** Display title, if the server supplied one. */
   title?: string;

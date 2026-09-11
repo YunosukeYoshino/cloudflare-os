@@ -4,15 +4,15 @@
 // of a stringly typed escape hatch. `Gatekeeper.getTypeScriptTypes()` returns the result, and the
 // Workshop feeds it to the agent's type database.
 //
-// The methods described here are installed by `session-methods.ts`, so both derive the name from
-// `toMethodName` rather than each spelling the rule out: a type advertising a method that does not
-// exist is worse than no type at all.
+// The methods described here are installed by `session-methods.ts`, so both derive names from
+// `toolMethodNames` rather than each spelling the rule out: a type advertising a method that does
+// not exist is worse than no type at all.
 //
 // `callTool` generates precise overloads for described tools plus a generic overload for names
 // discovered later through `listTools`.
 
 import type { JsonSchema } from "./client.js";
-import { toMethodName, toolMethodNames } from "./session-methods.js";
+import { methodsForTool, toolMethodNames } from "./session-methods.js";
 import { MAX_SEARCH_RESULTS } from "./tool-search.js";
 import type { ClassifiedTool, ServerTrust } from "./tools.js";
 
@@ -211,20 +211,17 @@ function renderObject(
   return `{\n${members.join("\n")}\n${indent}}`;
 }
 
-// The JSDoc for one tool: the server's own description, plus what calling it will actually do.
-function toolDoc(entry: ClassifiedTool, all: ClassifiedTool[]): string {
+// The JSDoc for one installed method: the server's own description, plus what calling it will do.
+function toolDoc(entry: ClassifiedTool, method: string): string {
   const { tool, mode, autoApprovable } = entry;
   const detail = mode === "read"
     ? "Read-only: returns `{ status: \"ok\" }` and is recorded as an observation."
     : autoApprovable
       ? "Action: queued for approval, and may be auto-applied if you have opted in to its kind."
       : "Action: queued for approval; the result arrives via `getActionResult`.";
-  const method = toMethodName(tool.name);
-  // Say the wire name whenever it is not obvious from the method name, so an agent reading only this
-  // comment can still reach the tool through `callTool`.
-  const wire = method === tool.name || !toolMethodNames(all).has(method ?? "")
-    ? undefined
-    : `Calls \`${tool.name}\`.`;
+  // Say the wire name whenever this signature is the camelCase alias, so an agent reading only this
+  // comment can still reach the tool through the name `listTools` reports, or through `callTool`.
+  const wire = method === tool.name ? undefined : `Calls \`${tool.name}\`.`;
   const description = tool.description ?? tool.title;
   return [...(description ? [description, ""] : []), detail, wire]
     .filter(part => part !== undefined)
@@ -308,7 +305,6 @@ export function generateSessionTypes(args: {
   const lines: string[] = [args.baseTypes.trimEnd(), ""];
 
   const methodNames = toolMethodNames(args.tools);
-  const wireToMethod = new Map([...methodNames].map(([method, wire]) => [wire, method]));
 
   const serverName = inlineCommentSafe(args.serverName);
   const endpoint = inlineCommentSafe(args.endpoint);
@@ -345,6 +341,8 @@ export function generateSessionTypes(args: {
   lines.push(" * described tool(s) are treated as actions:");
   lines.push(" * `callTool` queues them for approval and returns `{ status: \"pending\" }`; the result");
   lines.push(" * becomes available through `getActionResult` once a human approves.");
+  lines.push(" * Named methods use the MCP tool's published name when that is a valid identifier");
+  lines.push(" * (`list_issues()`), plus a camelCase alias (`listIssues()`). Both call the same tool.");
   lines.push(" * When using this session from `executeCode`, return from that executeCode call as soon as");
   lines.push(" * an action is pending so its approval can appear in chat. Approval resumes the agent;");
   lines.push(" * denial ends the turn. Call `getActionResult` after approval.");
@@ -367,23 +365,23 @@ export function generateSessionTypes(args: {
   lines.push("  listTools(options: McpToolListOptions): Promise<McpToolInfo[] | McpToolSummary[]>;");
   lines.push("");
 
-  // One named method per tool, which is how a Gadget is expected to call them.
+  // Named methods per tool: the wire name when it is a usable identifier, then a camelCase alias.
   for (const entry of args.tools) {
-    const method = wireToMethod.get(entry.tool.name);
-    if (!method) continue;
-    lines.push(docComment(toolDoc(entry, args.tools), "  ").trimEnd());
-    switch (argumentStyle(entry.tool.inputSchema)) {
-      case "none":
-        lines.push(`  ${method}(): Promise<McpCallResult>;`);
-        break;
-      case "freeform":
-        lines.push(`  ${method}(args?: Record<string, unknown>): Promise<McpCallResult>;`);
-        break;
-      case "typed":
-        lines.push(`  ${method}(args: ${argsNames.get(entry.tool.name)}): Promise<McpCallResult>;`);
-        break;
+    for (const method of methodsForTool(methodNames, entry.tool.name)) {
+      lines.push(docComment(toolDoc(entry, method), "  ").trimEnd());
+      switch (argumentStyle(entry.tool.inputSchema)) {
+        case "none":
+          lines.push(`  ${method}(): Promise<McpCallResult>;`);
+          break;
+        case "freeform":
+          lines.push(`  ${method}(args?: Record<string, unknown>): Promise<McpCallResult>;`);
+          break;
+        case "typed":
+          lines.push(`  ${method}(args: ${argsNames.get(entry.tool.name)}): Promise<McpCallResult>;`);
+          break;
+      }
+      lines.push("");
     }
-    lines.push("");
   }
 
   lines.push("  /**");

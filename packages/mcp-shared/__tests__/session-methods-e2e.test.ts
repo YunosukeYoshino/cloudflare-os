@@ -23,7 +23,7 @@ it("every method the .d.ts promises is really installed, and routes to the right
     endpoint: "https://mcp.linear.app/mcp", discriminator: "https://mcp.linear.app/mcp",
     trust: "byo", tools,
   });
-  const promised = [...dts.matchAll(/^ {2}([a-z]\w*)\(/gm)].map(match => match[1])
+  const promised = [...dts.matchAll(/^ {2}([A-Za-z_]\w*)\(/gm)].map(match => match[1])
     .filter(name => ![
       "listTools", "callTool",
       "getActionResult",
@@ -36,11 +36,15 @@ it("every method the .d.ts promises is really installed, and routes to the right
   const Session = installToolMethods(Base, tools);
   const session = new Session() as Base & Record<string, () => string>;
 
-  // `list_issues` and `listIssues` collide so neither may claim the name; `then`/`map` are hijacked by
-  // the RPC stub; `2fa` is not an identifier. The rest camel-case as expected -- including the writes,
-  // which are queued for approval rather than refused.
+  // Wire names that are identifiers are installed as methods (`list_issues`, `save_issue`).
+  // `list_issues` and `listIssues` no longer collide as aliases: each keeps its own wire name.
+  // `then`/`map` are hijacked by the RPC stub; `2fa` is not an identifier. Hyphenated names
+  // keep only their camelCase alias. Writes are queued for approval rather than refused.
   expect(promised.toSorted())
-    .toEqual(["deleteProject", "getUserById", "saveIssue", "search", "whoami"]);
+    .toEqual([
+      "Search", "deleteProject", "delete_project", "getUserById", "listIssues", "list_issues",
+      "saveIssue", "save_issue", "search", "whoami",
+    ]);
 
   for (const method of promised) {
     expect(typeof session[method], method).toBe("function");
