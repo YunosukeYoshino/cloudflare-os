@@ -58,6 +58,7 @@ import { RpcStub, RpcTarget } from "capnweb";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import styles from "./ChatInterface.module.css";
+import { toolCallGroupHasError } from "./chatToolGroupError";
 import {
   getStoredSelectedModel,
   persistSelectedModel,
@@ -931,7 +932,7 @@ function buildToolCallGroups(
     detailLines,
     calls: toolCalls,
     observations,
-    hasError: toolCalls.some((tc) => Boolean(tc.error)),
+    hasError: toolCallGroupHasError(toolCalls, observations.length),
   }];
 }
 
