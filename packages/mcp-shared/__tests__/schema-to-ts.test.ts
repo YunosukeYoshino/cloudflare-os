@@ -455,8 +455,27 @@ session.listTools(ambiguousOptions);
     expect(output).toContain("getActionResult(actionId: number): Promise<McpCallResult>;");
   });
 
+  it("declares the MCP wire name as a method alongside its camelCase alias", () => {
+    // `listTools` reports `name: "get_test_case"`. Models call that as RPC; the generated file has
+    // to promise the same method the session actually installs.
+    const output = generate([tool({ name: "get_test_case" })], MCP_BASE_TYPES);
+    const name = sessionTypeName("acme-crm", "https://acme.example/mcp");
+    expect(output).toContain("get_test_case(): Promise<McpCallResult>;");
+    expect(output).toContain("getTestCase(): Promise<McpCallResult>;");
+    expect(output).toContain("Calls `get_test_case`.");
+    expect(output).toContain(
+      "Named methods use the MCP tool's published name when that is a valid identifier");
+    expectTypeScriptProgramToCompile(`${output}
+declare const session: ${name};
+session.get_test_case();
+session.getTestCase();
+session.callTool("get_test_case");
+`);
+  });
+
   it("keeps discovery stable when an upstream tool collides with its method name", () => {
     const output = generate([tool({ name: "search_tools" })]);
+    expect(output).toContain("search_tools(): Promise<McpCallResult>;");
     expect(output).toContain("searchTools(): Promise<McpCallResult>;");
     expect(output).toContain("listTools(options: { search: string; name?: never })");
     expect(output).toContain('callTool(name: "search_tools"');
