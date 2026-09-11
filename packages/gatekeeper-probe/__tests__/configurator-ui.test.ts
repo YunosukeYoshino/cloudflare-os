@@ -53,7 +53,7 @@ describe("workspace configurator", () => {
   it("always emits the workspace URL", async () => {
     const spec = await loadWorkspaceSpec();
     const ui = { resourceUrl: async () => "probe://workspace" };
-    expect(spec.isReady({ values: {} } as never)).toBe(true);
+    expect(spec.isReady()).toBe(true);
     await expect(spec.resourceUrl({ values: {}, ui } as never)).resolves.toBe("probe://workspace");
   });
 });
