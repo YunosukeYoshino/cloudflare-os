@@ -183,6 +183,7 @@ test("worker entries carry the deploy contract", () => {
   assert.equal(workers["gatekeeper-mcp"].singleton, true);
   assert.equal(workers["gatekeeper-mcp-portal"].singleton, true);
   assert.equal(workers["gatekeeper-homeassistant"].singleton, true);
+  assert.equal(workers["gatekeeper-probe"].singleton, true);
 
   // Module blobs are content-addressed.
   for (const [name, entry] of Object.entries(workers)) {

@@ -679,6 +679,47 @@
         "BASE_URL": "$PUBLIC_BASE_URL/gatekeeper/notion"
       }
     },
+    "gatekeeper-probe": {
+      "bindings": [],
+      "compatibilityDate": "2026-09-04",
+      "compatibilityFlags": [
+        "allow_irrevocable_stub_storage"
+      ],
+      "inputs": [],
+      "installable": true,
+      "kind": "gatekeeper",
+      "mainModule": "probe.js",
+      "migrations": [
+        {
+          "new_sqlite_classes": [
+            "UserAccount",
+            "ProbeGatekeeperImpl"
+          ],
+          "tag": "v0"
+        }
+      ],
+      "modules": [
+        {
+          "name": "probe.js",
+          "r2Key": "blobs/modules/1aaf03c5436fe52b06bbebe6e7ae09b6343e81e7820df1b51abafd41b385b5b0",
+          "sha256": "1aaf03c5436fe52b06bbebe6e7ae09b6343e81e7820df1b51abafd41b385b5b0",
+          "size": 58,
+          "type": "esm"
+        }
+      ],
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1,
+        "logs": {
+          "invocation_logs": false
+        }
+      },
+      "shortName": "probe",
+      "singleton": true,
+      "vars": {
+        "BASE_URL": "$PUBLIC_BASE_URL/gatekeeper/probe"
+      }
+    },
     "gatekeeper-scheduler": {
       "bindings": [],
       "compatibilityDate": "2026-09-04",
