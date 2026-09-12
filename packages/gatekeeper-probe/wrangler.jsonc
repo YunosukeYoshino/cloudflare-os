@@ -1,0 +1,27 @@
+{
+  "name": "gatekeeper-probe",
+  "main": ".wrangler/validate/src/probe.ts",
+  "build": {
+    "command": "pnpm exec capnweb-validate build --out .wrangler/validate",
+    "watch_dir": "src"
+  },
+  "compatibility_date": "2026-09-04",
+  // Probe's primary target is a local API on loopback (`http://127.0.0.1:8789`). Do not set
+  // `global_fetch_strictly_public`: that flag is what forces gatekeeper-mcp to need
+  // MCP_ALLOW_INSECURE for the same host.
+  "compatibility_flags": ["allow_irrevocable_stub_storage"],
+  "rules": [
+    { "type": "Text", "globs": ["**/*.txt", "**/*.svg"], "fallthrough": false }
+  ],
+  "migrations": [
+    {
+      "tag": "v0",
+      "new_sqlite_classes": ["UserAccount", "ProbeGatekeeperImpl"]
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": { "invocation_logs": false }
+  }
+}
